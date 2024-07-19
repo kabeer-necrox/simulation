@@ -16,11 +16,9 @@ import argparse
 
 last_sort_time = -1
 
-
 def dispatching_combined_permachine(ptuple_fcn, machine, time, setups):
     for lot in machine.waiting_lots:
         lot.ptuple = ptuple_fcn(lot, time, machine, setups)
-
 
 def get_lots_to_dispatch_by_machine(instance, ptuple_fcn, machine=None):
     time = instance.current_time
@@ -65,7 +63,6 @@ def get_lots_to_dispatch_by_machine(instance, ptuple_fcn, machine=None):
         machine.dispatch_failed = 0
     return machine, lots
 
-
 def build_batch(lot, nexts):
     batch = [lot]
     if lot.actual_step.batch_max > 1:
@@ -75,7 +72,6 @@ def build_batch(lot, nexts):
             if len(batch) == lot.actual_step.batch_max:
                 break
     return batch
-
 
 def get_lots_to_dispatch_by_lot(instance, current_time, dispatcher):
     global last_sort_time
@@ -107,39 +103,40 @@ def get_lots_to_dispatch_by_lot(instance, current_time, dispatcher):
         return setup_machine, build_batch(lots[setup_batch], lots[setup_batch + 1:])
     return min_run_break_machine, build_batch(lots[min_run_break_batch], lots[min_run_break_batch + 1:])
 
+def run_greedy(args=None):
+    if args is None:
+        # Parse command-line arguments
+        p = argparse.ArgumentParser()
+        p.add_argument('--dataset', type=str, required=True, help='Dataset to use')
+        p.add_argument('--days', type=int, required=True, help='Number of days to simulate')
+        p.add_argument('--dispatcher', type=str, required=True, help='Dispatcher to use')
+        p.add_argument('--seed', type=int, default=None, help='Random seed')
+        p.add_argument('--wandb', action='store_true', default=False, help='Enable wandb logging')
+        p.add_argument('--chart', action='store_true', default=False, help='Enable chart plotting')
+        p.add_argument('--alg', type=str, default='l4m', choices=['l4m', 'm4l'], help='Algorithm to use')
+        args = p.parse_args()
 
-def run_greedy():
-    p = argparse.ArgumentParser()
-    p.add_argument('--dataset', type=str)
-    p.add_argument('--days', type=int)
-    p.add_argument('--dispatcher', type=str)
-    p.add_argument('--seed', type=int)
-    p.add_argument('--wandb', action='store_true', default=False)
-    p.add_argument('--chart', action='store_true', default=False)
-    p.add_argument('--alg', type=str, default='l4m', choices=['l4m', 'm4l'])
-    a = p.parse_args()
-
-    sys.stderr.write('Loading ' + a.dataset + ' for ' + str(a.days) + ' days, using ' + a.dispatcher + '\n')
+    sys.stderr.write('Loading ' + args.dataset + ' for ' + str(args.days) + ' days, using ' + args.dispatcher + '\n')
     sys.stderr.flush()
 
     start_time = datetime.now()
 
-    files = read_all('datasets/' + a.dataset)
+    files = read_all('datasets/' + args.dataset)
 
-    run_to = 3600 * 24 * a.days
-    Randomizer().random.seed(a.seed)
-    l4m = a.alg == 'l4m'
+    run_to = 3600 * 24 * args.days
+    Randomizer().random.seed(args.seed)
+    l4m = args.alg == 'l4m'
     plugins = []
-    if a.wandb:
+    if args.wandb:
         from simulation.plugins.wandb_plugin import WandBPlugin
         plugins.append(WandBPlugin())
-    if a.chart:
+    if args.chart:
         from simulation.plugins.chart_plugin import ChartPlugin
         plugins.append(ChartPlugin())
     plugins.append(CostPlugin())
     instance = FileInstance(files, run_to, l4m, plugins)
 
-    dispatcher = dispatcher_map[a.dispatcher]
+    dispatcher = dispatcher_map[args.dispatcher]
 
     sys.stderr.write('Starting simulation with dispatching rule\n\n')
     sys.stderr.flush()
@@ -168,4 +165,17 @@ def run_greedy():
     instance.finalize()
     interval = datetime.now() - start_time
     print(instance.current_time_days, ' days simulated in ', interval)
-    print_statistics(instance, a.days, a.dataset, a.dispatcher, method='greedy_seed' + str(a.seed))
+    print_statistics(instance, args.days, args.dataset, args.dispatcher, method='greedy_seed' + str(args.seed))
+
+if __name__ == '__main__':
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument('--dataset', type=str, required=True)
+    p.add_argument('--days', type=int, required=True)
+    p.add_argument('--dispatcher', type=str, required=True)
+    p.add_argument('--seed', type=int, default=None)
+    p.add_argument('--wandb', action='store_true', default=False)
+    p.add_argument('--chart', action='store_true', default=False)
+    p.add_argument('--alg', type=str, default='l4m', choices=['l4m', 'm4l'])
+    args = p.parse_args()
+    run_greedy(args)
